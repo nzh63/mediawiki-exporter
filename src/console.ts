@@ -84,6 +84,7 @@ export class Console {
   }
   status(process_number: number, data: string, ...args: any[]): void {
     let msg = args.length ? formatWithOptions({ breakLength: Infinity }, data, ...args) : data;
+    msg = msg.replace(/[\n\r]/g, '');
     const maxLength = process.stdout.columns - 15;
     if (process.stdout.isTTY) {
       if (msg.length > maxLength) {
