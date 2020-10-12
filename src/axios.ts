@@ -1,13 +1,11 @@
-import _axios from 'axios';
+import _axios, { AxiosRequestConfig, CancelTokenSource } from 'axios';
 import http from 'http';
 import https from 'https';
 import { HTTP_TIMEOUT, USER_AGENT } from './config';
 
-const source = _axios.CancelToken.source();
 const axios = _axios.create({
     httpAgent: new http.Agent({ keepAlive: true }),
     httpsAgent: new https.Agent({ keepAlive: true }),
-    cancelToken: source.token,
     timeout: HTTP_TIMEOUT,
     headers: {
         'Accept-Encoding': 'gzip',
@@ -16,8 +14,36 @@ const axios = _axios.create({
     }
 });
 
+let sources: CancelTokenSource[] = [];
+axios.interceptors.request.use(config => {
+    if (!config.cancelToken) {
+        const source = _axios.CancelToken.source();
+        config.cancelToken = source.token;
+        sources.push(source);
+    }
+    return config;
+});
+
+axios.interceptors.response.use(
+    resp => {
+        if (resp.config.cancelToken) {
+            sources = sources.filter(i => i.token !== resp.config.cancelToken);
+        }
+        return resp;
+    },
+    error => {
+        if (error.config) {
+            const config = error.config as AxiosRequestConfig;
+            if (config.cancelToken) {
+                sources = sources.filter(i => i.token !== config.cancelToken);
+            }
+        }
+    }
+);
+
 export function cancelRequest(): void {
-    source.cancel();
+    sources.forEach(i => i.cancel());
+    sources = [];
 }
 
 export default axios;
