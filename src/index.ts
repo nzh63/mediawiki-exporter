@@ -1,33 +1,38 @@
 import fs from 'fs';
-import MyConsole from './MyConsole';
-import { initTask, doAllTask, close } from './task';
-import { API_URL, MAX_HTTP_CONNECTION, ERROR_LOG_PATH, DUMP_XML_PATH } from './config';
+import zlib from 'zlib';
+import { format } from 'util';
+import { Console } from './console';
+import { Scheduler } from './scheduler';
+import { MAX_WORKERS } from './config';
+import { AcceptTask, dispatcher } from './dispatcher';
+import { QuerySiteInfoTask, QUERY_SITE_INFO, solveUncloseTags } from './tasks';
+import { cancelRequest } from './axios';
 
-const err_log = fs.createWriteStream(ERROR_LOG_PATH);
-const dump = fs.createWriteStream(DUMP_XML_PATH);
-const my_console = new MyConsole(MAX_HTTP_CONNECTION);
+const gzip = zlib.createGzip();
+const dump = fs.createWriteStream('./output/dump.xml.gz');
+const errLog = fs.createWriteStream('./output/err.log');
+gzip.pipe(dump);
 
-initTask();
-my_console.log(`API_URL=${API_URL}`, 'info');
-my_console.log(`DUMP_XML_PATH=${DUMP_XML_PATH}`, 'info');
-my_console.log(`ERROR_LOG_PATH=${ERROR_LOG_PATH}`, 'info');
-const works: Promise<void>[] = [];
-for (let p = 0; p < MAX_HTTP_CONNECTION; p++) {
-    const work = doAllTask(
-        dump,
-        msg => { my_console.log(msg, 'warn'); if (err_log.writable) err_log.write(msg + '\n'); },
-        msg => my_console.status(p, msg))
-        .then(msg => my_console.status(p, `idle: ${msg}`));
-    works.push(work);
-}
+const console = new Console(MAX_WORKERS);
+const scheduler = new Scheduler(
+    MAX_WORKERS,
+    (data, ...args) => { console.warn(data, ...args); if (errLog.writable) errLog.write(format(data, ...args) + '\n'); },
+    console.log.bind(console),
+    console.status.bind(console)
+);
 
-const onExit = () => {
-    my_console.destruct();
-    close(dump);
-    err_log.end();
-    err_log.once('finish', dump.close);
-};
-
-Promise.all(works).finally(onExit);
+scheduler.addTask<QuerySiteInfoTask>({ type: QUERY_SITE_INFO });
+scheduler.run<AcceptTask>(task => dispatcher(task, scheduler, gzip)).finally(onExit);
 
 process.on('SIGINT', onExit);
+
+function onExit() {
+    console.destroy();
+    cancelRequest();
+    scheduler.clearTask();
+    solveUncloseTags(gzip);
+    gzip.once('end', () => gzip.close());
+    gzip.once('close', () => errLog.end());
+    errLog.once('end', () => errLog.close());
+    gzip.end();
+}

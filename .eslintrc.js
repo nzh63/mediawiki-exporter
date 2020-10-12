@@ -8,9 +8,14 @@ module.exports = {
         sourceType: 'module'
     },
     plugins: ['@typescript-eslint'],
-    extends: ['plugin:@typescript-eslint/eslint-recommended'],
+    extends: [
+        'eslint:recommended',
+        'plugin:@typescript-eslint/eslint-recommended',
+        'plugin:@typescript-eslint/recommended'
+    ],
     rules: {
-        'semi': 'error'
+        'semi': 'error',
+        '@typescript-eslint/explicit-function-return-type': 'off'
     },
     globals: {
         BigInt: 'readonly'
