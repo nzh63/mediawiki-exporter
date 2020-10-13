@@ -2,7 +2,7 @@ import stream from 'stream';
 import fs from 'fs';
 import { escape } from 'jsontoxml';
 import axios from './axios';
-import { Scheduler, Task } from './scheduler';
+import { ProgressFunction, Scheduler, Task } from './scheduler';
 import { API_URL, TITLE_BLACK_LIST } from './config';
 
 interface PageInfo {
@@ -94,13 +94,13 @@ function printXmlHead(dump: stream.Writable): void {
     uncloseTags.push('mediawiki');
 }
 
-export async function getSiteInfo(scheduler: Scheduler, dump: stream.Writable): Promise<void> {
+export async function getSiteInfo(scheduler: Scheduler, dump: stream.Writable, progress: ProgressFunction): Promise<void> {
     const response = await axios.get(API_URL, {
         params: {
             'action': 'query',
             'format': 'json',
             'meta': 'siteinfo',
-            'siprop': 'general|namespaces',
+            'siprop': 'general|namespaces|statistics',
             'utf8': 1
         }
     });
@@ -127,7 +127,7 @@ export async function getSiteInfo(scheduler: Scheduler, dump: stream.Writable): 
     dump.write('</namespaces>');
     uncloseTags.pop();
     dump.write('</siteinfo>');
-
+    progress(0, response.data.query.statistics?.pages ?? 1);
 }
 
 export async function getPageList(task: QueryPageListTask, scheduler: Scheduler): Promise<void> {
@@ -240,7 +240,15 @@ export async function getPageInfo(task: QueryPageInfoTask, scheduler: Scheduler)
     }
 }
 
-export async function saveToFile(task: SaveToFileTask, dump: stream.Writable): Promise<void> {
+let fileLock = false;
+const fileWaiting: (() => void)[] = [];
+export async function saveToFile(task: SaveToFileTask, dump: stream.Writable, progress: ProgressFunction): Promise<void> {
+    if (fileLock) {
+        await new Promise(resolve => {
+            fileWaiting.push(resolve);
+        });
+    }
+    fileLock = true;
     const { config } = task;
     const { pageInfo: { id: pageId, title, ns }, revisions } = config;
     dump.write('<page>');
@@ -269,6 +277,13 @@ export async function saveToFile(task: SaveToFileTask, dump: stream.Writable): P
     }
     uncloseTags.pop();
     dump.write('</page>');
+    fileLock = false;
+    if (fileWaiting.length) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const resolve = fileWaiting.shift()!;
+        resolve();
+    }
+    progress();
 }
 
 async function saveRevision(revision: RevisionData, dump: stream.Writable): Promise<void> {

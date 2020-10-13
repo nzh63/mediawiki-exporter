@@ -9,6 +9,8 @@ export class Console {
   private timeoutID?: NodeJS.Timeout;
   private isFlashing = false;
   private blockedFlashCallbacks: (() => void)[] = [];
+  private progressCurrent = 0;
+  private progressAll = 1;
 
   constructor(processCount: number) {
     this.statusBuffer = Array(processCount).fill('idle');
@@ -63,8 +65,16 @@ export class Console {
       for (const i in this.statusBuffer) {
         output += `\n[${Number(i) + 1}/${this.statusBuffer.length}] ${Console.icon[this.iconId]} ${this.statusBuffer[i]}`;
       }
+      const progressStr = `${this.progressCurrent}/${this.progressAll}`;
+      output += '\n';
+      const maxLength = process.stdout.columns - 3 - progressStr.length;
+      if (maxLength >= 0) {
+        const finish = maxLength * this.progressCurrent / this.progressAll;
+        const unfinish = maxLength - finish;
+        output += `[${'#'.repeat(finish) + '.'.repeat(unfinish)}] ${progressStr}`;
+      }
       process.stdout.cursorTo(0, () => {
-        process.stdout.moveCursor(0, - this.statusBuffer.length, () => {
+        process.stdout.moveCursor(0, - this.statusBuffer.length - 1, () => {
           process.stdout.clearScreenDown(() => {
             process.stdout.write(output, () => {
               this.isFlashing = false;
@@ -96,9 +106,21 @@ export class Console {
       console.log(process_number, msg);
     }
   }
-  getWindowHeight(): number {
-    return process.stdout.isTTY ? process.stdout.getWindowSize()[1] : this.statusBuffer.length;
+
+  progress(cur?: number, all?: number): void {
+    if (all) {
+      all = Math.max(all, 1);
+      this.progressAll = all;
+    }
+    if (cur) {
+      cur = Math.max(cur, 0);
+      this.progressCurrent = cur;
+    } else {
+      this.progressCurrent++;
+    }
+    this.progressCurrent = Math.min(this.progressCurrent, this.progressAll);
   }
+
   destroy(callback?: () => void): void {
     if (this.timeoutID) {
       clearInterval(this.timeoutID);

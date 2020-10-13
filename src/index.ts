@@ -18,11 +18,12 @@ const scheduler = new Scheduler(
     MAX_WORKERS,
     (data, ...args) => { console.warn(data, ...args); if (errLog.writable) errLog.write(format(data, ...args) + '\n'); },
     console.log.bind(console),
-    console.status.bind(console)
+    console.status.bind(console),
+    console.progress.bind(console)
 );
 
 scheduler.addTask<QuerySiteInfoTask>({ type: QUERY_SITE_INFO });
-scheduler.run<AcceptTask>(task => dispatcher(task, scheduler, gzip)).finally(onExit);
+scheduler.run<AcceptTask>((task, warn, log, progress) => dispatcher(task, scheduler, gzip, progress)).finally(onExit);
 
 process.on('SIGINT', onExit);
 

@@ -7,6 +7,8 @@ export interface Task {
 }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type LogFunction = (...args: any[]) => void
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ProgressFunction = (...args: any[]) => void
 
 export class Scheduler {
     private currentRunningTask = 0;
@@ -17,11 +19,12 @@ export class Scheduler {
         private workerCount: number,
         private warn: LogFunction = console.warn,
         private log: LogFunction = console.log,
-        private status?: LogFunction
+        private status?: LogFunction,
+        private progress?: ProgressFunction
     ) { }
 
     async run<T extends Task>(
-        doTask: (task: T, warn: LogFunction, log: LogFunction) => Promise<void>
+        doTask: (task: T, warn: LogFunction, log: LogFunction, progress: ProgressFunction) => Promise<void>
     ): Promise<void> {
         const works: Promise<void>[] = [];
         for (let p = 0; p < this.workerCount; p++) {
@@ -29,7 +32,8 @@ export class Scheduler {
                 doTask,
                 this.warn,
                 this.log,
-                (...args) => this.status?.(p, ...args)
+                (...args) => this.status?.(p, ...args),
+                this.progress
             ).then(msg => this.status?.(p, `idle: ${msg}`));
             works.push(work);
         }
@@ -47,10 +51,11 @@ export class Scheduler {
     }
 
     private async doAllTask<T extends Task>(
-        doTask: (task: T, warn: LogFunction, log: LogFunction) => Promise<void>,
+        doTask: (task: T, warn: LogFunction, log: LogFunction, progress: ProgressFunction) => Promise<void>,
         warn: LogFunction,
         log: LogFunction,
         status?: LogFunction,
+        progress?: ProgressFunction
     ): Promise<string> {
         while (!(this.taskQueue.length === 0 && this.currentRunningTask === 0)) {
             if (this.taskQueue.length === 0) {
@@ -64,7 +69,7 @@ export class Scheduler {
                 const task = this.taskQueue.shift()!;
                 status?.('Running task:', task);
                 try {
-                    await doTask(task as T, warn, log);
+                    await doTask(task as T, warn, log, progress ?? (() => null));
                 } catch (e) {
                     warn('Unable to finish task:', task);
                     warn(e.message ?? e);
