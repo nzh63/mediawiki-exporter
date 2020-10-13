@@ -1,4 +1,5 @@
 import stream from 'stream';
+import fs from 'fs';
 import { escape } from 'jsontoxml';
 import axios from './axios';
 import { Scheduler, Task } from './scheduler';
@@ -46,6 +47,11 @@ interface QueryPageResp {
     }
 }
 
+interface TmpFile {
+    path: string;
+    writeStream: fs.WriteStream
+}
+
 export const QUERY_SITE_INFO = Symbol('QUERY_SITE_INFO');
 export const QUERY_PAGE_LIST = Symbol('QUERY_PAGE_LIST');
 export const QUERY_PAGE_INFO = Symbol('QUERY_PAGE_INFO');
@@ -66,14 +72,16 @@ export interface QueryPageInfoTask extends Task {
     config: {
         id: number;
         title?: string;
-        revisions?: RevisionData[];
         continue?: string;
+        revisions?: RevisionData[];
+        tmpFile?: TmpFile;
     };
 }
 export interface SaveToFileTask extends Task {
     type: typeof SAVE_TO_FILE;
     config: {
         pageInfo: PageInfo;
+        tmpFile?: TmpFile;
         revisions: RevisionData[];
     };
 }
@@ -201,14 +209,23 @@ export async function getPageInfo(task: QueryPageInfoTask, scheduler: Scheduler)
         commenthidden: typeof i.commenthidden !== 'undefined',
         sha1hidden: typeof i.sha1hidden !== 'undefined',
     })) ?? []);
+    let { tmpFile } = config;
     if (response.data.continue) {
+        if (!tmpFile) {
+            const path = `./output/tmp/${id}.xml.tmp`;
+            const writeStream = fs.createWriteStream(path);
+            tmpFile = { path, writeStream };
+        }
+        for (const i of revisions) {
+            await saveRevision(i, tmpFile.writeStream);
+        }
         scheduler.addTask<QueryPageInfoTask>({
             type: QUERY_PAGE_INFO,
             config: {
                 id,
                 title,
-                revisions,
-                continue: response.data.continue.rvcontinue
+                continue: response.data.continue.rvcontinue,
+                tmpFile
             }
         }, true);
     } else {
@@ -216,6 +233,7 @@ export async function getPageInfo(task: QueryPageInfoTask, scheduler: Scheduler)
             type: SAVE_TO_FILE,
             config: {
                 pageInfo: { id, title, ns },
+                tmpFile,
                 revisions
             }
         }, true);
@@ -230,50 +248,67 @@ export async function saveToFile(task: SaveToFileTask, dump: stream.Writable): P
     dump.write(`<title>${escape(title)}</title>`);
     dump.write(`<ns>${escape('' + ns)}</ns>`);
     dump.write(`<id>${escape('' + pageId)}</id>`);
+    if (config.tmpFile) {
+        await new Promise(resolve => {
+            config.tmpFile?.writeStream.once('end', () => config.tmpFile?.writeStream.close());
+            config.tmpFile?.writeStream.once('close', () => resolve());
+            config.tmpFile?.writeStream.end();
+        });
+        const read = fs.createReadStream(config.tmpFile.path);
+        read.pipe(dump, { end: false });
+        await new Promise(resolve => {
+            read.once('end', async () => {
+                if (config.tmpFile) await fs.promises.unlink(config.tmpFile?.path);
+                resolve();
+            });
+        });
+    }
     for (const i of revisions) {
         if (!i) continue;
-        const { revid, parentid, timestamp, user, userid, comment, sha1, size, contentmodel, contentformat, anon, minor, '*': text } = i;
-        dump.write('<revision>');
-        uncloseTags.push('revision');
-        dump.write(`<id>${escape('' + revid)}</id>`);
-        if (parentid) { dump.write(`<parentid>${escape('' + parentid)}</parentid>`); }
-        dump.write(`<timestamp>${escape(timestamp)}</timestamp>`);
-        if (!i.userhidden) {
-            if (anon) {
-                dump.write(`<contributor><ip>${escape(user)}</ip></contributor>`);
-            } else {
-                dump.write(`<contributor><username>${escape(user)}</username><id>${escape('' + userid)}</id></contributor>`);
-            }
-        } else {
-            dump.write('<contributor deleted="deleted" />');
-        }
-        if (minor) {
-            dump.write('<minor />');
-        }
-        if (!i.commenthidden) {
-            dump.write(`<comment>${escape(comment)}</comment>`);
-        } else {
-            dump.write('<comment deleted="deleted" />');
-        }
-        dump.write(`<model>${escape(contentmodel)}</model>`);
-        dump.write(`<format>${escape('' + contentformat)}</format>`);
-        if (!i.texthidden) {
-            dump.write(`<text xml:space="preserve" bytes="${escape('' + size)}">${escape(text)}</text>`);
-        } else {
-            dump.write(`<text bytes="${escape('' + size)}" deleted="deleted" />`);
-        }
-        if (!i.sha1hidden) {
-            // see /mediawiki/includes/api/ApiQueryRecentChanges.php:612
-            const sha1String = BigInt('0x' + sha1).toString(36);
-            dump.write(`<sha1>${escape(sha1String)}</sha1>`);
-        } else {
-            dump.write('<sha1 />');
-        }
-        uncloseTags.pop();
-        dump.write('</revision>');
+        await saveRevision(i, dump);
     }
     uncloseTags.pop();
     dump.write('</page>');
+}
+
+async function saveRevision(revision: RevisionData, dump: stream.Writable): Promise<void> {
+    const { revid, parentid, timestamp, user, userid, comment, sha1, size, contentmodel, contentformat, anon, minor, '*': text } = revision;
+    dump.write('<revision>');
+    dump.write(`<id>${escape('' + revid)}</id>`);
+    if (parentid) { dump.write(`<parentid>${escape('' + parentid)}</parentid>`); }
+    dump.write(`<timestamp>${escape(timestamp)}</timestamp>`);
+    if (!revision.userhidden) {
+        if (anon) {
+            dump.write(`<contributor><ip>${escape(user)}</ip></contributor>`);
+        } else {
+            dump.write(`<contributor><username>${escape(user)}</username><id>${escape('' + userid)}</id></contributor>`);
+        }
+    } else {
+        dump.write('<contributor deleted="deleted" />');
+    }
+    if (minor) {
+        dump.write('<minor />');
+    }
+    if (!revision.commenthidden) {
+        dump.write(`<comment>${escape(comment)}</comment>`);
+    } else {
+        dump.write('<comment deleted="deleted" />');
+    }
+    dump.write(`<model>${escape(contentmodel)}</model>`);
+    dump.write(`<format>${escape('' + contentformat)}</format>`);
+    if (!revision.texthidden) {
+        dump.write(`<text xml:space="preserve" bytes="${escape('' + size)}">${escape(text)}</text>`);
+    } else {
+        dump.write(`<text bytes="${escape('' + size)}" deleted="deleted" />`);
+    }
+    if (!revision.sha1hidden) {
+        // see /mediawiki/includes/api/ApiQueryRecentChanges.php:612
+        const sha1String = BigInt('0x' + sha1).toString(36);
+        dump.write(`<sha1>${escape(sha1String)}</sha1>`);
+    } else {
+        dump.write('<sha1 />');
+    }
+    dump.write('</revision>');
 }
 
 export function solveUncloseTags(dump: stream.Writable): void {

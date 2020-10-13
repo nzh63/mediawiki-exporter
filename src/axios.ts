@@ -38,6 +38,7 @@ axios.interceptors.response.use(
                 sources = sources.filter(i => i.token !== config.cancelToken);
             }
         }
+        return Promise.reject(error);
     }
 );
 

@@ -87,8 +87,9 @@ export class Console {
     msg = msg.replace(/[\n\r]/g, '');
     const maxLength = process.stdout.columns - 15;
     if (process.stdout.isTTY) {
-      if (msg.length > maxLength) {
-        msg = Buffer.from(msg, 'utf-8').toString('utf-8', 0, maxLength) + '...';
+      const buf = Buffer.from(msg, 'utf-8');
+      if (buf.length > maxLength) {
+        msg = buf.toString('utf-8', 0, maxLength) + '...';
       }
       this.statusBuffer[process_number] = msg;
     } else {
