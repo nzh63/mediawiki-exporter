@@ -1,5 +1,5 @@
 import fs from 'fs';
-import zlib from 'zlib';
+import { createCompressor } from 'lzma-native';
 import { format } from 'util';
 import { Console } from './console';
 import { Scheduler } from './scheduler';
@@ -8,10 +8,10 @@ import { AcceptTask, dispatcher } from './dispatcher';
 import { QuerySiteInfoTask, QUERY_SITE_INFO, solveUncloseTags } from './tasks';
 import { cancelRequest } from './axios';
 
-const gzip = zlib.createGzip();
-const dump = fs.createWriteStream('./output/dump.xml.gz');
+const lzma = createCompressor({ threads: 0 });
+const dump = fs.createWriteStream('./output/dump.xml.xz');
 const errLog = fs.createWriteStream('./output/err.log');
-gzip.pipe(dump);
+lzma.pipe(dump);
 
 const console = new Console(MAX_WORKERS);
 const scheduler = new Scheduler(
@@ -23,7 +23,7 @@ const scheduler = new Scheduler(
 );
 
 scheduler.addTask<QuerySiteInfoTask>({ type: QUERY_SITE_INFO });
-scheduler.run<AcceptTask>((task, warn, log, progress) => dispatcher(task, scheduler, gzip, progress)).finally(onExit);
+scheduler.run<AcceptTask>((task, warn, log, progress) => dispatcher(task, scheduler, lzma, progress)).finally(onExit);
 
 process.on('SIGINT', onExit);
 
@@ -31,9 +31,10 @@ function onExit() {
     console.destroy();
     cancelRequest();
     scheduler.clearTask();
-    solveUncloseTags(gzip);
-    gzip.once('end', () => gzip.close());
-    gzip.once('close', () => errLog.end());
+    solveUncloseTags(lzma);
+    lzma.once('end', () => dump.end());
+    dump.once('end', () => errLog.close());
+    dump.once('close', () => errLog.end());
     errLog.once('end', () => errLog.close());
-    gzip.end();
+    lzma.end();
 }
