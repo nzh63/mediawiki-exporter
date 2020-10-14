@@ -28,11 +28,6 @@
   resolved "https://registry.npm.taobao.org/@types/json-schema/download/@types/json-schema-7.0.6.tgz?cache=0&sync_timestamp=1598910403749&other_urls=https%3A%2F%2Fregistry.npm.taobao.org%2F%40types%2Fjson-schema%2Fdownload%2F%40types%2Fjson-schema-7.0.6.tgz#f4c7ec43e81b319a9815115031709f26987891f0"
   integrity sha1-9MfsQ+gbMZqYFRFQMXCfJph4kfA=
 
-"@types/jsontoxml@^1.0.1":
-  version "1.0.1"
-  resolved "https://registry.npm.taobao.org/@types/jsontoxml/download/@types/jsontoxml-1.0.1.tgz#ddec23eb7be0e5d9b6f305c1eb5b38de43d64fc9"
-  integrity sha1-3ewj63vg5dm28wXB61s43kPWT8k=
-
 "@types/node@^14.0.0":
   version "14.11.8"
   resolved "https://registry.npm.taobao.org/@types/node/download/@types/node-14.11.8.tgz#fe2012f2355e4ce08bca44aeb3abbb21cf88d33f"
@@ -268,6 +263,11 @@ emoji-regex@^8.0.0:
   version "8.0.0"
   resolved "https://registry.npm.taobao.org/emoji-regex/download/emoji-regex-8.0.0.tgz#e818fd69ce5ccfcb404594f842963bf53164cc37"
   integrity sha1-6Bj9ac5cz8tARZT4QpY79TFkzDc=
+
+entities@^2.0.3:
+  version "2.0.3"
+  resolved "https://registry.npm.taobao.org/entities/download/entities-2.0.3.tgz#5c487e5742ab93c15abb5da22759b8590ec03b7f"
+  integrity sha1-XEh+V0Krk8Fau12iJ1m4WQ7AO38=
 
 escape-string-regexp@^1.0.5:
   version "1.0.5"
@@ -610,11 +610,6 @@ json-stable-stringify-without-jsonify@^1.0.1:
   version "1.0.1"
   resolved "https://registry.npm.taobao.org/json-stable-stringify-without-jsonify/download/json-stable-stringify-without-jsonify-1.0.1.tgz#9db7b59496ad3f3cfef30a75142d2d930ad72651"
   integrity sha1-nbe1lJatPzz+8wp1FC0tkwrXJlE=
-
-jsontoxml@^1.0.1:
-  version "1.0.1"
-  resolved "https://registry.npm.taobao.org/jsontoxml/download/jsontoxml-1.0.1.tgz#07fff7f6bfbfa1097d779aec7f041b5046075e70"
-  integrity sha1-B//39r+/oQl9d5rsfwQbUEYHXnA=
 
 levn@^0.3.0, levn@~0.3.0:
   version "0.3.0"

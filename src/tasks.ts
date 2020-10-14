@@ -1,6 +1,6 @@
 import stream from 'stream';
 import fs from 'fs';
-import { escape } from 'jsontoxml';
+import { encodeXML } from 'entities';
 import axios from './axios';
 import { ProgressFunction, Scheduler, Task } from './scheduler';
 import { API_URL, TITLE_BLACK_LIST } from './config';
@@ -112,16 +112,16 @@ export async function getSiteInfo(scheduler: Scheduler, dump: stream.Writable, p
     printXmlHead(dump);
     dump.write('<siteinfo>');
     uncloseTags.push('siteinfo');
-    dump.write(`<sitename>${escape(sitename)}</sitename>`);
-    dump.write(`<dbname>${escape(wikiid)}</dbname>`);
-    dump.write(`<base>${escape(base)}</base>`);
-    dump.write(`<generator>${escape(generator)}</generator>`);
-    dump.write(`<case>${escape(case_)}</case>`);
+    dump.write(`<sitename>${encodeXML('' + sitename)}</sitename>`);
+    dump.write(`<dbname>${encodeXML('' + wikiid)}</dbname>`);
+    dump.write(`<base>${encodeXML('' + base)}</base>`);
+    dump.write(`<generator>${encodeXML('' + generator)}</generator>`);
+    dump.write(`<case>${encodeXML('' + case_)}</case>`);
     dump.write('<namespaces>');
     uncloseTags.push('namespaces');
     for (const i in namespaces) {
         if (namespaces[i].id >= 0) { scheduler.addTask<QueryPageListTask>({ type: QUERY_PAGE_LIST, config: { ns: namespaces[i].id } }); }
-        dump.write(`<namespace key="${escape(namespaces[i].id)}" case="${escape(namespaces[i].case)}">${escape(namespaces[i]['*'])}</namespace>`);
+        dump.write(`<namespace key="${encodeXML('' + namespaces[i].id)}" case="${encodeXML('' + namespaces[i].case)}">${encodeXML('' + namespaces[i]['*'])}</namespace>`);
     }
     uncloseTags.pop();
     dump.write('</namespaces>');
@@ -253,9 +253,9 @@ export async function saveToFile(task: SaveToFileTask, dump: stream.Writable, pr
     const { pageInfo: { id: pageId, title, ns }, revisions } = config;
     dump.write('<page>');
     uncloseTags.push('page');
-    dump.write(`<title>${escape(title)}</title>`);
-    dump.write(`<ns>${escape('' + ns)}</ns>`);
-    dump.write(`<id>${escape('' + pageId)}</id>`);
+    dump.write(`<title>${encodeXML(title)}</title>`);
+    dump.write(`<ns>${encodeXML('' + ns)}</ns>`);
+    dump.write(`<id>${encodeXML('' + pageId)}</id>`);
     if (config.tmpFile) {
         await new Promise(resolve => {
             config.tmpFile?.writeStream.once('end', () => config.tmpFile?.writeStream.close());
@@ -289,14 +289,14 @@ export async function saveToFile(task: SaveToFileTask, dump: stream.Writable, pr
 async function saveRevision(revision: RevisionData, dump: stream.Writable): Promise<void> {
     const { revid, parentid, timestamp, user, userid, comment, sha1, size, contentmodel, contentformat, anon, minor, '*': text } = revision;
     dump.write('<revision>');
-    dump.write(`<id>${escape('' + revid)}</id>`);
-    if (parentid) { dump.write(`<parentid>${escape('' + parentid)}</parentid>`); }
-    dump.write(`<timestamp>${escape(timestamp)}</timestamp>`);
+    dump.write(`<id>${encodeXML('' + revid)}</id>`);
+    if (parentid) { dump.write(`<parentid>${encodeXML('' + parentid)}</parentid>`); }
+    dump.write(`<timestamp>${encodeXML(timestamp)}</timestamp>`);
     if (!revision.userhidden) {
         if (anon) {
-            dump.write(`<contributor><ip>${escape(user)}</ip></contributor>`);
+            dump.write(`<contributor><ip>${encodeXML(user)}</ip></contributor>`);
         } else {
-            dump.write(`<contributor><username>${escape(user)}</username><id>${escape('' + userid)}</id></contributor>`);
+            dump.write(`<contributor><username>${encodeXML(user)}</username><id>${encodeXML('' + userid)}</id></contributor>`);
         }
     } else {
         dump.write('<contributor deleted="deleted" />');
@@ -305,21 +305,21 @@ async function saveRevision(revision: RevisionData, dump: stream.Writable): Prom
         dump.write('<minor />');
     }
     if (!revision.commenthidden) {
-        dump.write(`<comment>${escape(comment)}</comment>`);
+        dump.write(`<comment>${encodeXML(comment)}</comment>`);
     } else {
         dump.write('<comment deleted="deleted" />');
     }
-    dump.write(`<model>${escape(contentmodel)}</model>`);
-    dump.write(`<format>${escape('' + (contentformat ?? 'text/x-wiki'))}</format>`);
+    dump.write(`<model>${encodeXML(contentmodel)}</model>`);
+    dump.write(`<format>${encodeXML('' + (contentformat ?? 'text/x-wiki'))}</format>`);
     if (!revision.texthidden) {
-        dump.write(`<text xml:space="preserve" bytes="${escape('' + size)}">${escape(text)}</text>`);
+        dump.write(`<text xml:space="preserve" bytes="${encodeXML('' + size)}">${encodeXML(text)}</text>`);
     } else {
-        dump.write(`<text bytes="${escape('' + size)}" deleted="deleted" />`);
+        dump.write(`<text bytes="${encodeXML('' + size)}" deleted="deleted" />`);
     }
     if (!revision.sha1hidden) {
         // see /mediawiki/includes/api/ApiQueryRecentChanges.php:612
         const sha1String = BigInt('0x' + sha1).toString(36);
-        dump.write(`<sha1>${escape(sha1String)}</sha1>`);
+        dump.write(`<sha1>${encodeXML(sha1String)}</sha1>`);
     } else {
         dump.write('<sha1 />');
     }
