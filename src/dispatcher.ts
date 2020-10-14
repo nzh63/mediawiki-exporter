@@ -12,7 +12,7 @@ export function dispatcher(task: AcceptTask, scheduler: Scheduler, dump: stream.
     } else if (task.type === QUERY_PAGE_INFO) {
         return getPageInfo(task, scheduler);
     } else if (task.type === SAVE_TO_FILE) {
-        return saveToFile(task, dump, progress);
+        return saveToFile(task, scheduler, dump, progress);
     } else {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const check: never = task;

@@ -240,51 +240,50 @@ export async function getPageInfo(task: QueryPageInfoTask, scheduler: Scheduler)
     }
 }
 
-let fileLock = false;
-const fileWaiting: (() => void)[] = [];
-export async function saveToFile(task: SaveToFileTask, dump: stream.Writable, progress: ProgressFunction): Promise<void> {
-    if (fileLock) {
-        await new Promise(resolve => {
-            fileWaiting.push(resolve);
-        });
-    }
-    fileLock = true;
-    const { config } = task;
-    const { pageInfo: { id: pageId, title, ns }, revisions } = config;
-    dump.write('<page>');
-    uncloseTags.push('page');
-    dump.write(`<title>${encodeXML(title)}</title>`);
-    dump.write(`<ns>${encodeXML('' + ns)}</ns>`);
-    dump.write(`<id>${encodeXML('' + pageId)}</id>`);
-    if (config.tmpFile) {
-        await new Promise(resolve => {
-            config.tmpFile?.writeStream.once('end', () => config.tmpFile?.writeStream.close());
-            config.tmpFile?.writeStream.once('close', () => resolve());
-            config.tmpFile?.writeStream.end();
-        });
-        const read = fs.createReadStream(config.tmpFile.path);
-        read.pipe(dump, { end: false });
-        await new Promise(resolve => {
-            read.once('end', async () => {
-                if (config.tmpFile) await fs.promises.unlink(config.tmpFile?.path);
-                resolve();
+export const saveToFile = (function () {
+    let fileLock = false;
+    const fileWaiting: SaveToFileTask[] = [];
+    return async function saveToFile(task: SaveToFileTask, scheduler: Scheduler, dump: stream.Writable, progress: ProgressFunction): Promise<void> {
+        if (fileLock) {
+            fileWaiting.push(task);
+            return;
+        }
+        fileLock = true;
+        const { config } = task;
+        const { pageInfo: { id: pageId, title, ns }, revisions } = config;
+        dump.write('<page>');
+        uncloseTags.push('page');
+        dump.write(`<title>${encodeXML(title)}</title>`);
+        dump.write(`<ns>${encodeXML('' + ns)}</ns>`);
+        dump.write(`<id>${encodeXML('' + pageId)}</id>`);
+        if (config.tmpFile) {
+            await new Promise(resolve => {
+                config.tmpFile?.writeStream.once('end', () => config.tmpFile?.writeStream.close());
+                config.tmpFile?.writeStream.once('close', () => resolve());
+                config.tmpFile?.writeStream.end();
             });
-        });
-    }
-    for (const i of revisions) {
-        if (!i) continue;
-        await saveRevision(i, dump);
-    }
-    uncloseTags.pop();
-    dump.write('</page>');
-    fileLock = false;
-    if (fileWaiting.length) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const resolve = fileWaiting.shift()!;
-        resolve();
-    }
-    progress();
-}
+            const read = fs.createReadStream(config.tmpFile.path);
+            read.pipe(dump, { end: false });
+            await new Promise(resolve => {
+                read.once('end', async () => {
+                    if (config.tmpFile) await fs.promises.unlink(config.tmpFile?.path);
+                    resolve();
+                });
+            });
+        }
+        for (const i of revisions) {
+            await saveRevision(i, dump);
+        }
+        uncloseTags.pop();
+        dump.write('</page>');
+        fileLock = false;
+        if (fileWaiting.length) {
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            scheduler.addTask(fileWaiting.shift()!, true);
+        }
+        progress();
+    };
+})();
 
 async function saveRevision(revision: RevisionData, dump: stream.Writable): Promise<void> {
     const { revid, parentid, timestamp, user, userid, comment, sha1, size, contentmodel, contentformat, anon, minor, '*': text } = revision;
