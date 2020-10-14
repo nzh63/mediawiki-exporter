@@ -25,7 +25,7 @@ interface RevisionData {
     sha1: string;
     size: number;
     contentmodel: string;
-    contentformat: string;
+    contentformat?: string;
     comment: string;
     '*': string;
     anon?: boolean | "";
@@ -310,7 +310,7 @@ async function saveRevision(revision: RevisionData, dump: stream.Writable): Prom
         dump.write('<comment deleted="deleted" />');
     }
     dump.write(`<model>${escape(contentmodel)}</model>`);
-    dump.write(`<format>${escape('' + contentformat)}</format>`);
+    dump.write(`<format>${escape('' + (contentformat ?? 'text/x-wiki'))}</format>`);
     if (!revision.texthidden) {
         dump.write(`<text xml:space="preserve" bytes="${escape('' + size)}">${escape(text)}</text>`);
     } else {
